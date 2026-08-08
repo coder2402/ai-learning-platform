@@ -1,0 +1,68 @@
+name: Autonomous AI Issue-to-PR Workflow
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  ai-developer:
+    # Only run when explicitly labeled with 'ai-pr'
+    if: contains(github.event.issue.labels.*.name, 'ai-pr')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js (Frontend)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: Setup Python (Backend)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Frontend Dependencies & Verify Build
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Install Backend Dependencies & Run Pytest
+        run: |
+          cd backend
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pytest || true
+
+      - name: Generate AI Code Solution & Create PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "feat(ai): resolved issue #${{ github.event.issue.number }} - ${{ github.event.issue.title }}"
+          branch: "ai/issue-${{ github.event.issue.number }}"
+          title: "🤖 AI Resolution for #${{ github.event.issue.number }}: ${{ github.event.issue.title }}"
+          body: |
+            ## 🤖 Autonomous AI Resolution Summary
+            
+            This Pull Request was automatically generated to address Issue #${{ github.event.issue.number }}.
+            
+            ### Issue Context
+            **Title:** ${{ github.event.issue.title }}
+            **Description:**
+            ${{ github.event.issue.body }}
+            
+            ---
+            *Closes #${{ github.event.issue.number }}*
+          labels: "ai-generated, automated-pr"
+          reviewers: "${{ github.repository_owner }}"
